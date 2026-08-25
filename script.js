@@ -15,6 +15,8 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  query,
+  where,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import {
@@ -59,11 +61,9 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("loginScreen").style.display = "none";
     document.getElementById("app").style.display = "block";
 
-    const nomeUsuario = user.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    document.getElementById("userName").textContent = nomeUsuario;
-    document.getElementById("userRole").textContent = user.email;
-    document.getElementById("userAvatar").textContent =
-      nomeUsuario.charAt(0).toUpperCase();
+    const nome = user.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    document.getElementById("userName").textContent = nome;
+    document.getElementById("userEmail").textContent = user.email;
 
     await initApp(); // 🔥 IMPORTANTE
   } else {
@@ -73,7 +73,8 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function carregarAnalisesFirebase() {
-  const snapshot = await getDocs(collection(db, "analises"));
+  const q = query(collection(db, "analises"), where("criadoPor", "==", currentUser.uid));
+  const snapshot = await getDocs(q);
 
   analises = [];
 
@@ -239,23 +240,12 @@ async function logar() {
 
 /* ─── INIT ─── */
 async function initApp() {
-  updateTopDate();
-  setInterval(updateTopDate, 30000);
-
   // 🔥 CARREGA TUDO ANTES DE RENDERIZAR
   await carregarContratosFirebase();
   await carregarAnalisesFirebase();
 
   // 🔥 SÓ AGORA RENDERIZA
   goTo("dashboard");
-}
-
-function updateTopDate() {
-  const now = new Date();
-  document.getElementById("topDate").textContent = now.toLocaleDateString(
-    "pt-BR",
-    { weekday: "short", day: "2-digit", month: "short", year: "numeric" },
-  );
 }
 
 /* ─── NAVIGATION ─── */
@@ -688,10 +678,10 @@ function renderTabela() {
   </td>
 
   <td>
-    <div style="display:flex;flex-direction:column;gap:6px;">
-      <button class="btn-sm btn-view" onclick="verDetalhe('${realIdx}')">👁</button>
-      <button class="btn-sm btn-edit" onclick="editarContrato('${realIdx}')">✏️</button>
-      <button class="btn-sm btn-danger-sm" onclick="excluirContrato('${realIdx}')">🗑</button>
+    <div style="display:flex;flex-direction:row;gap:4px;justify-content:center;">
+      <button class="btn-icon btn-view" title="Ver detalhes" onclick="verDetalhe('${realIdx}')"><i class="bi bi-eye"></i></button>
+      <button class="btn-icon btn-edit" title="Editar" onclick="editarContrato('${realIdx}')"><i class="bi bi-pencil"></i></button>
+      <button class="btn-icon btn-danger-sm" title="Excluir" onclick="excluirContrato('${realIdx}')"><i class="bi bi-trash"></i></button>
     </div>
   </td>
 
@@ -1591,7 +1581,8 @@ async function salvarContrato() {
 }
 
 async function carregarContratosFirebase() {
-  const querySnapshot = await getDocs(collection(db, "contratos"));
+  const q = query(collection(db, "contratos"), where("userId", "==", currentUser.uid));
+  const querySnapshot = await getDocs(q);
 
   contratos = [];
 
@@ -1922,6 +1913,7 @@ document.getElementById("fValor").addEventListener("input", function (e) {
 // 🔓 Expor funções globais (necessário porque o script é module)
 window.logar = logar;
 window.logout = logout;
+window.toggleSenha = toggleSenha;
 
 window.goTo = goTo;
 window.changePage = changePage;
