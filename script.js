@@ -73,16 +73,12 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function carregarAnalisesFirebase() {
-  const q = query(collection(db, "analises"), where("criadoPor", "==", currentUser.uid));
-  const snapshot = await getDocs(q);
+  const snapshot = await getDocs(collection(db, "analises"));
 
   analises = [];
 
   snapshot.forEach((docSnap) => {
-    analises.push({
-      id: docSnap.id,
-      ...docSnap.data(),
-    });
+    analises.push({ id: docSnap.id, ...docSnap.data() });
   });
 }
 
@@ -1581,16 +1577,12 @@ async function salvarContrato() {
 }
 
 async function carregarContratosFirebase() {
-  const q = query(collection(db, "contratos"), where("userId", "==", currentUser.uid));
-  const querySnapshot = await getDocs(q);
+  const querySnapshot = await getDocs(collection(db, "contratos"));
 
   contratos = [];
 
   querySnapshot.forEach((docSnap) => {
-    contratos.push({
-      id: docSnap.id,
-      ...docSnap.data(),
-    });
+    contratos.push({ id: docSnap.id, ...docSnap.data() });
   });
 
   // 🔥 ESSENCIAL
