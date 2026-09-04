@@ -89,14 +89,14 @@
                             style="margin-left:auto;background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;display:none;"></span>
                     </button>
                 </div>
-                <div class="nav-section">
+                <div class="nav-section" id="navRelatorios">
                     <div class="nav-section-title">Relatórios</div>
                     <button class="nav-item" onclick="goTo('relatorios')">
                         <span class="nav-icon"><i class="bi bi-graph-up"></i></span> Relatórios
                     </button>
                 </div>
 
-                <button class="nav-item" onclick="goTo('arquivados')">
+                <button class="nav-item" id="navArquivados" onclick="goTo('arquivados')">
                     <span class="nav-icon"><i class="bi bi-archive"></i></span>
                     Arquivados
                 </button>
@@ -110,6 +110,13 @@
                     </span>
                     Acesso ao 1Doc
                 </button>
+
+                <div id="adminSection" style="display:none;">
+                    <div class="nav-section-title">Administração</div>
+                    <button class="nav-item" onclick="goTo('usuarios')">
+                        <span class="nav-icon"><i class="bi bi-people"></i></span>Usuários
+                    </button>
+                </div>
             </nav>
 
         </aside>
@@ -176,6 +183,7 @@
                                 <option value="critico">Crítico (≤20 dias)</option>
                                 <option value="aviso">Aviso (21-30 dias)</option>
                                 <option value="ok">Normal (>30 dias)</option>
+                                <option value="expirado">Expirados</option>
                             </select>
                             <button class="btn-sm btn-success" onclick="imprimirContratos()">
                                 <i class="bi bi-printer"></i> Imprimir
@@ -299,6 +307,9 @@
 
                 <div id="pageExportar" class="page"></div>
 
+                <!-- ── USUÁRIOS (admin) ── -->
+                <div id="pageUsuarios" class="page"></div>
+
             </div><!-- /content -->
         </div><!-- /main -->
     </div><!-- /app -->
@@ -355,6 +366,12 @@
                     </div>
                     <div class="field"><label>Fiscal de Contrato</label><input id="fResponsavel"
                             placeholder="Nome do gestor do contrato"></div>
+                    <div class="field" id="campoFiscalVinculado" style="display:none;">
+                        <label>Vincular ao Fiscal do Sistema</label>
+                        <select id="fFiscalId">
+                            <option value="">— Selecione um fiscal —</option>
+                        </select>
+                    </div>
                     <div class="field form-full"><label>Observações</label><textarea id="fObs"
                             placeholder="Informações adicionais..." style="min-height:60px;"></textarea></div>
                 </div>
@@ -398,6 +415,92 @@
                 <!-- conteúdo dinâmico -->
             </div>
 
+        </div>
+    </div>
+
+    <!-- ═══════ MODAL CRIAR USUÁRIO (admin) ═══════ -->
+    <div class="modal-overlay" id="modalCriarUsuario">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-header">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="width:40px;height:40px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+                        <i class="bi bi-person-plus-fill" style="font-size:18px;color:#fff;"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin:0;font-size:16px;">Novo Usuário</h2>
+                        <p style="margin:0;font-size:12px;color:var(--text2);">Crie um acesso ao sistema</p>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="fecharModal('modalCriarUsuario')">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
+                <div class="field">
+                    <label>E-mail</label>
+                    <input type="email" id="newUserEmail" placeholder="exemplo@gmail.com">
+                </div>
+                <div class="field">
+                    <label>Senha</label>
+                    <input type="password" id="newUserSenha" placeholder="Mínimo 6 caracteres">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-sm" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);"
+                    onclick="fecharModal('modalCriarUsuario')">Cancelar</button>
+                <button class="btn-sm btn-accent" onclick="criarNovoUsuario()">
+                    <i class="bi bi-person-check" style="margin-right:6px;"></i>Criar Usuário
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════ MODAL EDITAR USUÁRIO ═══════ -->
+    <div class="modal-overlay" id="modalEditarUsuario">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-header">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="width:40px;height:40px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+                        <i class="bi bi-pencil-fill" style="font-size:16px;color:#fff;"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin:0;font-size:16px;">Editar Usuário</h2>
+                        <p id="editUserEmailLabel" style="margin:0;font-size:12px;color:var(--text2);"></p>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="fecharModal('modalEditarUsuario')">✕</button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
+                <input type="hidden" id="editUserUid">
+                <div class="field">
+                    <label>Nome de exibição</label>
+                    <input type="text" id="editUserNome" placeholder="Nome do usuário">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-sm" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);"
+                    onclick="fecharModal('modalEditarUsuario')">Cancelar</button>
+                <button class="btn-sm btn-accent" onclick="salvarEdicaoUsuario()">
+                    <i class="bi bi-check-lg" style="margin-right:6px;"></i>Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════ MODAL HISTÓRICO ═══════ -->
+    <div class="modal-overlay" id="modalHistorico">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="width:40px;height:40px;border-radius:10px;background:#6a1b9a;display:flex;align-items:center;justify-content:center;">
+                        <i class="bi bi-clock-history" style="font-size:16px;color:#fff;"></i>
+                    </div>
+                    <div>
+                        <h2 style="margin:0;font-size:16px;">Histórico de Atividades</h2>
+                        <p id="historicoUsuarioNome" style="margin:0;font-size:12px;color:var(--text2);"></p>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="fecharModal('modalHistorico')">✕</button>
+            </div>
+            <div class="modal-body" id="historicoLista" style="max-height:420px;overflow-y:auto;"></div>
         </div>
     </div>
 

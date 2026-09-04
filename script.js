@@ -3,6 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getAuth,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -15,8 +16,11 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  setDoc,
+  getDoc,
   query,
   where,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import {
@@ -45,6 +49,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let currentUser = null;
+let isAdmin = false;
 /* ─── DATA ─── */
 let editingIndex = null;
 let currentPage = 1;
@@ -65,7 +70,27 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("userName").textContent = nome;
     document.getElementById("userEmail").textContent = user.email;
 
-    await initApp(); // 🔥 IMPORTANTE
+    isAdmin = user.email === "marlon@gmail.com";
+
+    const adminSection = document.getElementById("adminSection");
+    if (adminSection) adminSection.style.display = isAdmin ? "block" : "none";
+
+    const esconderParaFiscal = ["navRelatorios", "navArquivados"];
+    esconderParaFiscal.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = isAdmin ? "" : "none";
+    });
+
+    const btnNovo = document.querySelector("[onclick='abrirModalCadastro()']");
+    if (btnNovo) btnNovo.style.display = isAdmin ? "" : "none";
+
+    const userDoc = doc(db, "usuarios", user.uid);
+    const userSnap = await getDoc(userDoc);
+    if (!userSnap.exists()) {
+      await setDoc(userDoc, { email: user.email, uid: user.uid, criadoEm: new Date() });
+    }
+
+    await initApp();
   } else {
     document.getElementById("app").style.display = "none";
     document.getElementById("loginScreen").style.display = "flex";
@@ -73,7 +98,8 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function carregarAnalisesFirebase() {
-  const snapshot = await getDocs(collection(db, "analises"));
+  const q = query(collection(db, "analises"), where("criadoPor", "==", currentUser.uid));
+  const snapshot = await getDocs(q);
 
   analises = [];
 
@@ -236,12 +262,38 @@ async function logar() {
 
 /* ─── INIT ─── */
 async function initApp() {
-  // 🔥 CARREGA TUDO ANTES DE RENDERIZAR
+  await migrarDadosParaUsuarioSilencioso();
+
   await carregarContratosFirebase();
   await carregarAnalisesFirebase();
 
-  // 🔥 SÓ AGORA RENDERIZA
   goTo("dashboard");
+}
+
+async function migrarDadosParaUsuarioSilencioso() {
+  // Migração só roda para o Marlon — dono de todos os dados legados
+  if (currentUser.email !== "marlon@gmail.com") return;
+
+  const uid = currentUser.uid;
+  const storageKey = `migracaoV3_${uid}`;
+
+  if (localStorage.getItem(storageKey)) return;
+
+  const snapC = await getDocs(collection(db, "contratos"));
+  const batchC = writeBatch(db);
+  snapC.forEach((d) => {
+    batchC.update(doc(db, "contratos", d.id), { userId: uid });
+  });
+  if (!snapC.empty) await batchC.commit();
+
+  const snapA = await getDocs(collection(db, "analises"));
+  const batchA = writeBatch(db);
+  snapA.forEach((d) => {
+    batchA.update(doc(db, "analises", d.id), { criadoPor: uid });
+  });
+  if (!snapA.empty) await batchA.commit();
+
+  localStorage.setItem(storageKey, "1");
 }
 
 /* ─── NAVIGATION ─── */
@@ -281,7 +333,13 @@ const PAGES = {
     el: "pageArquivados",
     title: "Contratos Arquivados",
     subtitle: "Contratos que foram arquivados",
-    nav: 5,
+    nav: 4,
+  },
+  usuarios: {
+    el: "pageUsuarios",
+    title: "Usuários",
+    subtitle: "Usuários com acesso ao sistema",
+    nav: -1,
   },
 };
 
@@ -303,14 +361,12 @@ function goTo(page) {
   document.getElementById("pageSubtitle").textContent = cfg.subtitle;
 
   if (page === "dashboard") renderDashboard();
-  if (page === "contratos") {
-    renderTabela();
-  }
+  if (page === "contratos") renderTabela();
   if (page === "alertas") renderAlertas();
   if (page === "relatorios") renderRelatorios();
-  updateAlertBadge();
-
   if (page === "arquivados") renderArquivados();
+  if (page === "usuarios") renderUsuarios();
+  updateAlertBadge();
 }
 
 /* ─── DASHBOARD ─── */
@@ -353,42 +409,42 @@ function renderDashboard() {
   }
 
   document.getElementById("statsGrid").innerHTML = `
-  <div class="stat-card s-blue">
+  <div class="stat-card s-blue" onclick="irParaContratos('','')" style="cursor:pointer;">
     <div class="stat-icon"><i class="bi bi-file-earmark-text"></i></div>
     <div class="stat-label">Total</div>
     <div class="stat-value">${total}</div>
     <div class="stat-sub">Contratos cadastrados</div>
   </div>
 
-  <div class="stat-card s-green">
+  <div class="stat-card s-green" onclick="irParaContratos('Ativo','')" style="cursor:pointer;">
     <div class="stat-icon"><i class="bi bi-check-circle"></i></div>
     <div class="stat-label">Ativos</div>
     <div class="stat-value">${ativos}</div>
     <div class="stat-sub">${total ? Math.round((ativos / total) * 100) : 0}% do total</div>
   </div>
 
-  <div class="stat-card s-red">
+  <div class="stat-card s-red" onclick="irParaContratos('','critico')" style="cursor:pointer;">
     <div class="stat-icon"><i class="bi bi-exclamation-triangle"></i></div>
     <div class="stat-label">Críticos</div>
     <div class="stat-value">${criticos}</div>
     <div class="stat-sub">≤ 20 dias para vencer</div>
   </div>
 
-  <div class="stat-card s-yellow">
+  <div class="stat-card s-yellow" onclick="irParaContratos('','aviso')" style="cursor:pointer;">
     <div class="stat-icon"><i class="bi bi-clock"></i></div>
     <div class="stat-label">Aviso</div>
     <div class="stat-value">${aviso}</div>
     <div class="stat-sub">21 a 30 dias</div>
   </div>
 
-  <div class="stat-card s-purple">
+  <div class="stat-card s-purple" onclick="irParaContratos('','')" style="cursor:pointer;">
     <div class="stat-icon"><i class="bi bi-cash-stack"></i></div>
     <div class="stat-label">Valor Total</div>
-    <div class="stat-value" style="font-size:18px;">R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}</div>
+    <div class="stat-value" style="font-size:18px;">R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
     <div class="stat-sub">Todos os contratos</div>
   </div>
 
-  <div class="stat-card s-cyan">
+  <div class="stat-card s-cyan" onclick="irParaContratos('','expirado')" style="cursor:pointer;">
     <div class="stat-icon"><i class="bi bi-x-circle"></i></div>
     <div class="stat-label">Expirados</div>
     <div class="stat-value">${expirados}</div>
@@ -532,6 +588,14 @@ function renderChartValores(data) {
   });
 }
 
+window.irParaContratos = function(situacao, alerta) {
+  document.getElementById("searchInput").value = "";
+  document.getElementById("filterSituacao").value = situacao || "";
+  document.getElementById("filterAlerta").value = alerta || "";
+  currentPage = 1;
+  goTo("contratos");
+};
+
 /* ─── TABELA ─── */
 function renderTabela() {
   let data = contratos.filter((c) => !c.arquivado);
@@ -563,9 +627,10 @@ function renderTabela() {
   if (alerta) {
     data = data.filter((c) => {
       const d = diasRestantes(c.vigFinal);
-      if (alerta === "critico") return d !== null && d >= 0 && d <= 20;
-      if (alerta === "aviso") return d !== null && d > 20 && d <= 30;
-      if (alerta === "ok") return d !== null && d > 30;
+      if (alerta === "critico")  return d !== null && d >= 0 && d <= 20;
+      if (alerta === "aviso")    return d !== null && d > 20 && d <= 30;
+      if (alerta === "ok")       return d !== null && d > 30;
+      if (alerta === "expirado") return d !== null && d < 0;
       return true;
     });
   }
@@ -676,8 +741,10 @@ function renderTabela() {
   <td>
     <div style="display:flex;flex-direction:row;gap:4px;justify-content:center;">
       <button class="btn-icon btn-view" title="Ver detalhes" onclick="verDetalhe('${realIdx}')"><i class="bi bi-eye"></i></button>
+      ${isAdmin ? `
       <button class="btn-icon btn-edit" title="Editar" onclick="editarContrato('${realIdx}')"><i class="bi bi-pencil"></i></button>
       <button class="btn-icon btn-danger-sm" title="Excluir" onclick="excluirContrato('${realIdx}')"><i class="bi bi-trash"></i></button>
+      ` : ""}
     </div>
   </td>
 
@@ -1015,7 +1082,9 @@ async function excluirContrato(id) {
   if (!confirm("Tem certeza que deseja excluir este contrato?")) return;
 
   try {
+    const c = contratos.find(x => x.id === id);
     await deleteDoc(doc(db, "contratos", id));
+    await registrarHistorico("Excluiu contrato", c?.contrato || id);
 
     toast("Contrato excluído com sucesso.", "success");
 
@@ -1431,6 +1500,8 @@ async function arquivarContrato(id) {
       arquivado: true,
     });
 
+    const ca = contratos.find(x => x.id === id);
+    await registrarHistorico("Arquivou contrato", ca?.contrato || id);
     toast("Contrato arquivado!", "success");
 
     await carregarContratosFirebase();
@@ -1453,6 +1524,8 @@ async function desarquivarContrato(id) {
       arquivado: false,
     });
 
+    const cd = contratos.find(x => x.id === id);
+    await registrarHistorico("Desarquivou contrato", cd?.contrato || id);
     toast("Contrato desarquivado!", "success");
 
     await carregarContratosFirebase();
@@ -1465,7 +1538,7 @@ async function desarquivarContrato(id) {
   }
 }
 /* ─── CADASTRO ─── */
-function abrirModalCadastro() {
+async function abrirModalCadastro() {
   editingIndex = null;
 
   document.getElementById("modalCadTitle").textContent = "Novo Contrato";
@@ -1486,13 +1559,13 @@ function abrirModalCadastro() {
 
   document.getElementById("fSituacao").value = "Ativo";
   document.getElementById("fModalidade").value = "Pregão Eletrônico";
+  document.getElementById("fSetor").value = "";
 
-  document.getElementById("fSetor").value = ""; // ✔ CORRETO
-
+  await popularDropdownFiscais();
   abrirModal("modalCad");
 }
 
-function editarContrato(id) {
+async function editarContrato(id) {
   editingIndex = id;
 
   const data = contratos;
@@ -1521,6 +1594,7 @@ function editarContrato(id) {
   document.getElementById("fResponsavel").value = c.responsavel || "";
   document.getElementById("fObs").value = c.obs || "";
 
+  await popularDropdownFiscais(c.fiscalId || "");
   abrirModal("modalCad");
 }
 
@@ -1551,6 +1625,8 @@ async function salvarContrato() {
     createdAt: new Date(),
     updatedAt: new Date(),
     userId: currentUser.uid,
+    fiscalId: document.getElementById("fFiscalId")?.value || "",
+    fiscalNome: document.getElementById("fFiscalId")?.selectedOptions[0]?.text || "",
   };
 
   try {
@@ -1561,10 +1637,12 @@ async function salvarContrato() {
         updatedAt: new Date(),
       });
 
+      await registrarHistorico("Editou contrato", obj.contrato || obj.contratada);
       toast("Contrato atualizado com sucesso!", "success");
     } else {
       await addDoc(collection(db, "contratos"), obj);
 
+      await registrarHistorico("Criou contrato", obj.contrato || obj.contratada);
       toast("Contrato cadastrado com sucesso!", "success");
     }
 
@@ -1577,7 +1655,11 @@ async function salvarContrato() {
 }
 
 async function carregarContratosFirebase() {
-  const querySnapshot = await getDocs(collection(db, "contratos"));
+  const isAdmin = currentUser.email === "marlon@gmail.com";
+  const q = isAdmin
+    ? query(collection(db, "contratos"), where("userId", "==", currentUser.uid))
+    : query(collection(db, "contratos"), where("fiscalId", "==", currentUser.uid));
+  const querySnapshot = await getDocs(q);
 
   contratos = [];
 
@@ -1651,10 +1733,11 @@ function verDetalhe(id) {
     </div>
   `;
 
-  document.getElementById("btnEditDetalhe").onclick = () => {
-    fecharModal("modalDetalhe");
-    editarContrato(id);
-  };
+  const btnEdit = document.getElementById("btnEditDetalhe");
+  if (btnEdit) {
+    btnEdit.style.display = isAdmin ? "" : "none";
+    btnEdit.onclick = () => { fecharModal("modalDetalhe"); editarContrato(id); };
+  }
 
   abrirModal("modalDetalhe");
 }
@@ -1922,9 +2005,239 @@ window.verDetalhe = verDetalhe;
 window.salvarContrato = salvarContrato;
 
 window.exportarCSV = exportarCSV;
+async function popularDropdownFiscais(selecionado = "") {
+  const isAdmin = currentUser.email === "marlon@gmail.com";
+  const campo = document.getElementById("campoFiscalVinculado");
+  const select = document.getElementById("fFiscalId");
+  if (!campo || !select) return;
+
+  if (!isAdmin) { campo.style.display = "none"; return; }
+  campo.style.display = "block";
+
+  const snap = await getDocs(collection(db, "usuarios"));
+  const fiscais = [];
+  snap.forEach(d => {
+    const u = d.data();
+    if (u.email !== currentUser.email) fiscais.push(u);
+  });
+
+  select.innerHTML = `<option value="">— Sem fiscal vinculado —</option>` +
+    fiscais.map(u => `<option value="${u.uid}" ${u.uid === selecionado ? "selected" : ""}>${u.nome || u.email}</option>`).join("");
+}
+
+async function registrarHistorico(acao, detalhe) {
+  try {
+    await addDoc(collection(db, "historico"), {
+      userId: currentUser.uid,
+      userEmail: currentUser.email,
+      acao,
+      detalhe: detalhe || "",
+      timestamp: new Date(),
+    });
+  } catch (e) { /* silencioso */ }
+}
+
+async function renderUsuarios() {
+  const container = document.getElementById("pageUsuarios");
+  if (!container) return;
+
+  container.innerHTML = `<p style="color:var(--text2)">Carregando...</p>`;
+
+  const snap = await getDocs(collection(db, "usuarios"));
+  const lista = [];
+  snap.forEach(d => lista.push({ id: d.id, ...d.data() }));
+
+  const header = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div>
+        <div style="font-size:15px;font-weight:700;">${lista.length} usuário(s) cadastrado(s)</div>
+        <div style="font-size:12px;color:var(--text2);">Gerencie os acessos ao sistema</div>
+      </div>
+      <button class="btn-sm btn-accent" onclick="abrirModal('modalCriarUsuario')">
+        <i class="bi bi-person-plus" style="margin-right:6px;"></i>Criar Usuário
+      </button>
+    </div>`;
+
+  if (!lista.length) {
+    container.innerHTML = header + `
+      <div style="text-align:center;padding:60px 0;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:12px;">
+        <i class="bi bi-people" style="font-size:48px;display:block;margin-bottom:12px;"></i>
+        <p>Nenhum usuário criado ainda.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = header + `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+      ${lista.map(u => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;">
+          <div style="width:60px;height:60px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;">
+            <i class="bi bi-person-fill" style="color:#fff;font-size:26px;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:15px;">${u.nome || u.email.split("@")[0]}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px;">${u.email}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px;">Criado em ${u.criadoEm?.toDate ? u.criadoEm.toDate().toLocaleDateString("pt-BR") : "—"}</div>
+          </div>
+          <span style="font-size:11px;background:#e8f5e9;color:#2e7d32;border-radius:20px;padding:3px 12px;font-weight:600;">Ativo</span>
+          <div style="display:flex;gap:8px;width:100%;margin-top:4px;">
+            <button onclick="abrirEditarUsuario('${u.uid}','${u.nome || ""}','${u.email}')"
+              style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;cursor:pointer;color:var(--text);">
+              <i class="bi bi-pencil"></i> Editar
+            </button>
+            <button onclick="abrirHistoricoUsuario('${u.uid}','${u.nome || u.email}')"
+              style="flex:1;background:var(--accent);border:none;border-radius:8px;padding:8px;font-size:12px;cursor:pointer;color:#fff;">
+              <i class="bi bi-clock-history"></i> Histórico
+            </button>
+          </div>
+        </div>
+      `).join("")}
+    </div>`;
+}
+
+window.abrirEditarUsuario = function(uid, nome, email) {
+  document.getElementById("editUserUid").value = uid;
+  document.getElementById("editUserNome").value = nome;
+  document.getElementById("editUserEmailLabel").textContent = email;
+  abrirModal("modalEditarUsuario");
+};
+
+window.salvarEdicaoUsuario = async function() {
+  const uid = document.getElementById("editUserUid").value;
+  const nome = document.getElementById("editUserNome").value.trim();
+  if (!nome) { toast("Informe o nome.", "warning"); return; }
+  try {
+    await setDoc(doc(db, "usuarios", uid), { nome }, { merge: true });
+    toast("Usuário atualizado!", "success");
+    fecharModal("modalEditarUsuario");
+    renderUsuarios();
+  } catch(e) {
+    toast("Erro ao salvar.", "error");
+  }
+};
+
+window.abrirHistoricoUsuario = async function(uid, nomeUsuario) {
+  document.getElementById("historicoUsuarioNome").textContent = nomeUsuario;
+  document.getElementById("historicoLista").innerHTML = `<p style="color:var(--text2)">Carregando...</p>`;
+  abrirModal("modalHistorico");
+
+  const q = query(
+    collection(db, "historico"),
+    where("userId", "==", uid)
+  );
+  const snap = await getDocs(q);
+  const eventos = [];
+  snap.forEach(d => eventos.push(d.data()));
+  eventos.sort((a, b) => b.timestamp?.toDate() - a.timestamp?.toDate());
+
+  if (!eventos.length) {
+    document.getElementById("historicoLista").innerHTML =
+      `<p style="color:var(--text2);text-align:center;padding:30px 0;">Nenhuma atividade registrada.</p>`;
+    return;
+  }
+
+  const icones = {
+    "Criou contrato":      { icon: "bi-plus-circle-fill",   cor: "#2e7d32" },
+    "Editou contrato":     { icon: "bi-pencil-fill",        cor: "#1565c0" },
+    "Excluiu contrato":    { icon: "bi-trash-fill",         cor: "#c62828" },
+    "Arquivou contrato":   { icon: "bi-archive-fill",       cor: "#e65100" },
+    "Desarquivou contrato":{ icon: "bi-arrow-up-circle-fill", cor: "#6a1b9a" },
+  };
+
+  document.getElementById("historicoLista").innerHTML = eventos.map(e => {
+    const cfg = icones[e.acao] || { icon: "bi-dot", cor: "#666" };
+    const data = e.timestamp?.toDate ? e.timestamp.toDate().toLocaleString("pt-BR") : "—";
+    return `
+      <div style="display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border);">
+        <div style="width:32px;height:32px;border-radius:50%;background:${cfg.cor}22;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+          <i class="bi ${cfg.icon}" style="color:${cfg.cor};font-size:14px;"></i>
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:13px;">${e.acao}</div>
+          <div style="font-size:12px;color:var(--text2);">${e.detalhe}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">${data}</div>
+        </div>
+      </div>`;
+  }).join("");
+};
+
 window.exportarHTML = exportarHTML;
 window.abrirAnalise = abrirAnalise;
 window.salvarAnalise = salvarAnalise;
 window.arquivarContrato = arquivarContrato;
 window.desarquivarContrato = desarquivarContrato;
 window.verAnalise = verAnalise;
+
+window.criarNovoUsuario = async function () {
+  const email = document.getElementById("newUserEmail").value.trim();
+  const senha = document.getElementById("newUserSenha").value;
+
+  if (!email || !senha) {
+    toast("Preencha e-mail e senha.", "warning");
+    return;
+  }
+  if (senha.length < 6) {
+    toast("Senha precisa ter pelo menos 6 caracteres.", "warning");
+    return;
+  }
+
+  try {
+    const { initializeApp: initApp2 } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+    const { getAuth: getAuth2, createUserWithEmailAndPassword: createUser2, signOut: signOut2 } =
+      await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+
+    const appSecundario = initApp2(firebaseConfig, "criacaoUsuario_" + Date.now());
+    const authSecundario = getAuth2(appSecundario);
+
+    const cred = await createUser2(authSecundario, email, senha);
+    await signOut2(authSecundario);
+
+    await setDoc(doc(db, "usuarios", cred.user.uid), {
+      email,
+      uid: cred.user.uid,
+      criadoPor: currentUser.uid,
+      criadoEm: new Date(),
+    });
+
+    toast(`Usuário ${email} criado com sucesso!`, "success");
+    fecharModal("modalCriarUsuario");
+    document.getElementById("newUserEmail").value = "";
+    document.getElementById("newUserSenha").value = "";
+    renderUsuarios();
+  } catch (err) {
+    if (err.code === "auth/email-already-in-use") {
+      toast("Este e-mail já está cadastrado.", "error");
+    } else {
+      toast("Erro ao criar usuário: " + err.message, "error");
+    }
+  }
+};
+
+// Migração única — rode no console: migrarDadosParaUsuario()
+window.migrarDadosParaUsuario = async function () {
+  if (!currentUser) { console.error("Faça login primeiro."); return; }
+
+  const uid = currentUser.uid;
+  let total = 0;
+
+  // Contratos
+  const snapC = await getDocs(collection(db, "contratos"));
+  const batchC = writeBatch(db);
+  snapC.forEach((d) => {
+    if (!d.data().userId) { batchC.update(doc(db, "contratos", d.id), { userId: uid }); total++; }
+  });
+  await batchC.commit();
+
+  // Análises
+  const snapA = await getDocs(collection(db, "analises"));
+  const batchA = writeBatch(db);
+  snapA.forEach((d) => {
+    if (!d.data().criadoPor) { batchA.update(doc(db, "analises", d.id), { criadoPor: uid }); total++; }
+  });
+  await batchA.commit();
+
+  console.log(`✅ ${total} documentos migrados para ${currentUser.email}`);
+  toast(`${total} registros vinculados à sua conta.`, "success");
+  await carregarContratosFirebase();
+  goTo("dashboard");
+};
