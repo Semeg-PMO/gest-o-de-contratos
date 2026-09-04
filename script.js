@@ -588,6 +588,24 @@ function renderChartValores(data) {
   });
 }
 
+window.toggleFiscaisDropdown = function() {
+  const lista = document.getElementById("fFiscaisLista");
+  const chevron = document.getElementById("fFiscaisChevron");
+  const aberto = lista.style.display === "flex";
+  lista.style.display = aberto ? "none" : "flex";
+  lista.style.flexDirection = "column";
+  chevron.className = aberto ? "bi bi-chevron-down" : "bi bi-chevron-up";
+};
+
+function atualizarResumoFiscais() {
+  const marcados = Array.from(document.querySelectorAll("#fFiscaisLista input[type=checkbox]:checked"));
+  const resumo = document.getElementById("fFiscaisResumo");
+  if (!resumo) return;
+  resumo.textContent = marcados.length
+    ? marcados.map(el => el.dataset.nome).join(", ")
+    : "Selecionar fiscais...";
+}
+
 window.irParaContratos = function(situacao, alerta) {
   document.getElementById("searchInput").value = "";
   document.getElementById("filterSituacao").value = situacao || "";
@@ -1078,9 +1096,16 @@ window.gerarNotificacaoContrato = function (id) {
   w.document.close();
 };
 
-async function excluirContrato(id) {
-  if (!confirm("Tem certeza que deseja excluir este contrato?")) return;
+window.excluirContrato = function(id) {
+  const c = contratos.find(x => x.id === id);
+  document.getElementById("modalExclusaoNome").textContent =
+    c?.contrato ? `Contrato: ${c.contrato} — ${c.contratada}` : "Esta ação não pode ser desfeita.";
+  document.getElementById("btnConfirmarExclusao").onclick = () => confirmarExclusao(id);
+  abrirModal("modalConfirmarExclusao");
+};
 
+async function confirmarExclusao(id) {
+  fecharModal("modalConfirmarExclusao");
   try {
     const c = contratos.find(x => x.id === id);
     await deleteDoc(doc(db, "contratos", id));
@@ -1594,7 +1619,7 @@ async function editarContrato(id) {
   document.getElementById("fResponsavel").value = c.responsavel || "";
   document.getElementById("fObs").value = c.obs || "";
 
-  await popularDropdownFiscais(c.fiscalId || "");
+  await popularDropdownFiscais(c.fiscaisIds || []);
   abrirModal("modalCad");
 }
 
@@ -1625,8 +1650,8 @@ async function salvarContrato() {
     createdAt: new Date(),
     updatedAt: new Date(),
     userId: currentUser.uid,
-    fiscalId: document.getElementById("fFiscalId")?.value || "",
-    fiscalNome: document.getElementById("fFiscalId")?.selectedOptions[0]?.text || "",
+    fiscaisIds: Array.from(document.querySelectorAll("#fFiscaisLista input[type=checkbox]:checked")).map(el => el.value),
+    fiscaisNomes: Array.from(document.querySelectorAll("#fFiscaisLista input[type=checkbox]:checked")).map(el => el.dataset.nome),
   };
 
   try {
@@ -1658,7 +1683,7 @@ async function carregarContratosFirebase() {
   const isAdmin = currentUser.email === "marlon@gmail.com";
   const q = isAdmin
     ? query(collection(db, "contratos"), where("userId", "==", currentUser.uid))
-    : query(collection(db, "contratos"), where("fiscalId", "==", currentUser.uid));
+    : query(collection(db, "contratos"), where("fiscaisIds", "array-contains", currentUser.uid));
   const querySnapshot = await getDocs(q);
 
   contratos = [];
@@ -2005,11 +2030,11 @@ window.verDetalhe = verDetalhe;
 window.salvarContrato = salvarContrato;
 
 window.exportarCSV = exportarCSV;
-async function popularDropdownFiscais(selecionado = "") {
+async function popularDropdownFiscais(selecionados = []) {
   const isAdmin = currentUser.email === "marlon@gmail.com";
   const campo = document.getElementById("campoFiscalVinculado");
-  const select = document.getElementById("fFiscalId");
-  if (!campo || !select) return;
+  const lista = document.getElementById("fFiscaisLista");
+  if (!campo || !lista) return;
 
   if (!isAdmin) { campo.style.display = "none"; return; }
   campo.style.display = "block";
@@ -2021,8 +2046,23 @@ async function popularDropdownFiscais(selecionado = "") {
     if (u.email !== currentUser.email) fiscais.push(u);
   });
 
-  select.innerHTML = `<option value="">— Sem fiscal vinculado —</option>` +
-    fiscais.map(u => `<option value="${u.uid}" ${u.uid === selecionado ? "selected" : ""}>${u.nome || u.email}</option>`).join("");
+  if (!fiscais.length) {
+    lista.innerHTML = `<span style="font-size:12px;color:var(--text2);padding:4px;">Nenhum fiscal cadastrado.</span>`;
+    return;
+  }
+
+  const ids = Array.isArray(selecionados) ? selecionados : [selecionados].filter(Boolean);
+  lista.innerHTML = fiscais.map(u => `
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:4px 6px;border-radius:6px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <input type="checkbox" value="${u.uid}" data-nome="${u.nome || u.email}"
+        ${ids.includes(u.uid) ? "checked" : ""}
+        onchange="atualizarResumoFiscais()"
+        style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;">
+      ${u.nome || u.email}
+    </label>
+  `).join("");
+
+  atualizarResumoFiscais();
 }
 
 async function registrarHistorico(acao, detalhe) {

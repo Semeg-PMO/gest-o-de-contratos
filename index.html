@@ -318,7 +318,13 @@
     <div class="modal-overlay" id="modalCad">
         <div class="modal">
             <div class="modal-header">
-                <h2 id="modalCadTitle">Novo Contrato</h2>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <img src="img/prefeitura.png" alt="Prefeitura de Oriximiná" style="width:38px;height:38px;object-fit:contain;">
+                    <div>
+                        <h2 id="modalCadTitle" style="margin:0;">Novo Contrato</h2>
+                        <p style="margin:0;font-size:11px;color:var(--text2);">Prefeitura Municipal de Oriximiná</p>
+                    </div>
+                </div>
                 <button class="modal-close" onclick="fecharModal('modalCad')">✕</button>
             </div>
             <div class="modal-body">
@@ -366,11 +372,14 @@
                     </div>
                     <div class="field"><label>Fiscal de Contrato</label><input id="fResponsavel"
                             placeholder="Nome do gestor do contrato"></div>
-                    <div class="field" id="campoFiscalVinculado" style="display:none;">
-                        <label>Vincular ao Fiscal do Sistema</label>
-                        <select id="fFiscalId">
-                            <option value="">— Selecione um fiscal —</option>
-                        </select>
+                    <div class="field form-full" id="campoFiscalVinculado" style="display:none;position:relative;">
+                        <label>Fiscais Responsáveis</label>
+                        <div id="fFiscaisToggle" onclick="toggleFiscaisDropdown()"
+                            style="border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;background:var(--surface);display:flex;justify-content:space-between;align-items:center;font-size:13px;user-select:none;">
+                            <span id="fFiscaisResumo">Selecionar fiscais...</span>
+                            <i class="bi bi-chevron-down" id="fFiscaisChevron"></i>
+                        </div>
+                        <div id="fFiscaisLista" style="display:none;position:absolute;z-index:200;top:100%;left:0;right:0;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.12);padding:8px;margin-top:4px;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;"></div>
                     </div>
                     <div class="field form-full"><label>Observações</label><textarea id="fObs"
                             placeholder="Informações adicionais..." style="min-height:60px;"></textarea></div>
@@ -390,7 +399,13 @@
     <div class="modal-overlay" id="modalDetalhe">
         <div class="modal">
             <div class="modal-header">
-                <h2>Detalhes do Contrato</h2>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <img src="img/prefeitura.png" alt="Prefeitura de Oriximiná" style="width:38px;height:38px;object-fit:contain;">
+                    <div>
+                        <h2 style="margin:0;">Detalhes do Contrato</h2>
+                        <p style="margin:0;font-size:11px;color:var(--text2);">Prefeitura Municipal de Oriximiná</p>
+                    </div>
+                </div>
                 <button class="modal-close" onclick="fecharModal('modalDetalhe')">✕</button>
             </div>
             <div class="modal-body" id="modalDetalheBody"></div>
@@ -501,6 +516,37 @@
                 <button class="modal-close" onclick="fecharModal('modalHistorico')">✕</button>
             </div>
             <div class="modal-body" id="historicoLista" style="max-height:420px;overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <!-- ═══════ MODAL CONFIRMAR EXCLUSÃO ═══════ -->
+    <div class="modal-overlay" id="modalConfirmarExclusao">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-header">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <img src="img/prefeitura.png" alt="Prefeitura de Oriximiná" style="width:38px;height:38px;object-fit:contain;">
+                    <div>
+                        <h2 style="margin:0;font-size:16px;">Excluir Contrato</h2>
+                        <p style="margin:0;font-size:11px;color:var(--text2);">Prefeitura Municipal de Oriximiná</p>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="fecharModal('modalConfirmarExclusao')">✕</button>
+            </div>
+            <div class="modal-body" style="text-align:center;padding:28px;">
+                <div style="width:56px;height:56px;border-radius:50%;background:#fdecea;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                    <i class="bi bi-trash3-fill" style="font-size:24px;color:#c62828;"></i>
+                </div>
+                <p style="font-weight:700;font-size:15px;margin:0 0 8px;">Tem certeza que deseja excluir?</p>
+                <p id="modalExclusaoNome" style="font-size:13px;color:var(--text2);margin:0;">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-sm" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border);"
+                    onclick="fecharModal('modalConfirmarExclusao')">Cancelar</button>
+                <button class="btn-sm" id="btnConfirmarExclusao"
+                    style="background:#c62828;color:#fff;border:none;">
+                    <i class="bi bi-trash3" style="margin-right:6px;"></i>Excluir
+                </button>
+            </div>
         </div>
     </div>
 
